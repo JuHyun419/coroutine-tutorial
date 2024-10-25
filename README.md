@@ -62,8 +62,23 @@ IO 작업 (DB 입출력, 네트워크)
 <br>
 
 ## Hello Coroutines
+### 코루틴 실행
+- `runBlocking` 함수는 이 함수를 호출한 스레드를 사용해 실행되는 코루틴
+- `runBlocking` 코루틴이 종료될 때 스레드 점유가 해제된다.
+  - `runBlocking` = Run(실행) + Blocking(차단)
+
+![img_10.png](img_10.png)
+- 코루틴을 처음 만들 때 runBlocking 함수를 사용하고, 추가로 생성할 때는 launch 함수를 사용한다.
+
+### 코루틴 디버깅 (콘솔, 브레이크 포인트)
+![img_11.png](img_11.png)
+- JVM Options 설정
+
+![img_12.png](img_12.png)
 
 
+![img_13.png](img_13.png)
+- Layout > Coroutines 추가
 
 ## CoroutineDispatcher
 
