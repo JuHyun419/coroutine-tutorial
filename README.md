@@ -54,7 +54,7 @@
 - 이런 특징으로 인해 코루틴을 사용하면 입출력, I/O 작업 시 필요한 리소스가 줄어들게 된다.
 
 ![img_8.png](img_8.png)
-IO 작업 (DB 입출력, 네트워크)
+- IO 작업 (DB 입출력, 네트워크)
 
 ![img_9.png](img_9.png)
 - CPU Bound (이미지, 동영상, 대용량 데이터 반환 등) 작업은 성능 차이가 크게 없다. -> 스레드 작업이 계속 필요하기 때문
@@ -80,9 +80,88 @@ IO 작업 (DB 입출력, 네트워크)
 ![img_13.png](img_13.png)
 - Layout > Coroutines 추가
 
+<br>
+
 ## CoroutineDispatcher
+- Coroutine(코루틴) + Dispatcher(보내는 주체) -> 코루틴을 스레드로 보내는 실행시키는 객체
+
+![img_14.png](img_14.png)
+- 사용할 수 있는 스레드가 있다면, CoroutineDispatcher는 비어있는 스레드로 코루틴을 보내 실행시키는 주체
+
+### 단일 스레드 디스패처
+![img_15.png](img_15.png)
+
+### 멀티 스레드 디스패처
+![img_16.png](img_16.png)
+
+```
+[MultiThread-2] Start
+[MultiThread-1] Start
+```
+
+### 미리 정의된 CoroutineDispatcher
+
+#### Dispatcher.IO
+![img_17.png](img_17.png)
+- 네트워크 요청이나 DB 읽기 쓰기 같은 입출력(I/O) 작업을 실행하는 디스패처
+- 사용할 수 있는 스레드의 수: 64와 JVM에서 사용할 수 있는 프로세서의 수 중 큰 값
+
+```kotlin
+launch(multiThreadDispatcher) {
+    println("[${Thread.currentThread().name}] Start")
+}
 
 
+// 부모 코루틴
+launch(Dispatchers.IO) {
+
+    // 자식 코루틴 -> 부모 코루틴에 설정된 CoroutineDispatcher 을 사용
+    launch {
+        println("[${Thread.currentThread().name}] Start1")
+    }
+
+    launch {
+        println("[${Thread.currentThread().name}] Start2")
+    }
+}
+```
+
+
+#### Dispatchers.Default
+![img_18.png](img_18.png)
+- Default -> CPU 바운드 작업을 위한 디스패처
+- CPU 바운드 작업을 위해 IO 작업과 동일한 쓰레드 풀을 사용하면 CPU 바운드 작업이 모든 쓰레드를 사용할 경우, IO 작업이 제대로 실행되지 않을 수 있음
+
+![img_19.png](img_19.png)
+- 애플리케이션 레벨에서의 공유 스레드풀을 사용하기에 IO, Default의 스레드 명은 동일
+
+#### Dispatchers.Default 의 limitedParallelism
+![img_20.png](img_20.png)
+- 특정 작업 위에 사용할 수 있는 스레드 갯수를 제한할 수 있음
+```
+val imageProcessingDispatcher = Dispatchers.Default.limitedParallelism(2)
+```
+
+#### Dispatchers.IO 의 limitedParallelism
+![img_21.png](img_21.png)
+- Default의 limitedParallelism 와는 다르게, 별도의 공간에 스레드를 생성 (전용 스레드 풀)
+- 다른 작업에 방해 받지 않아야 하는 중요한 작업에 사용할 수 있음
+
+#### Dispatchers.Main
+- 메인 스레드에서의 작업을 위한 디스패처
+
+### Dispatcher 요약
+1. Dispatchers.IO는 입출력 작업을 위한 CoroutineDispatcher
+2. Dispatchers.Default는 CPU 바운드 작업을 위한 CoroutineDispatcher
+3. Dispatchers.IO와 Dispatchers.Default는 코루틴 라이브러리의 공유 스레드풀을 사용
+4. Dispatchers.Default의 limitedParallelism 함수를 사용하면, Dispatchers.Default의 스레드 중
+   일부만을 사용하는 CoroutineDispatcher을 만들 수 있다.
+5. Dispatchers.IO의 limitedParallelism 함수를 사용하면 공유 스레드풀의 별도 스레드를 사용하는
+   CoroutineDispatcher를 만들 수 있다.
+6. Dispatchers.Main은 메인 스레드를 사용하기 위한 디스패처이다.
+7. Dispatchers.Main.immediate는 코루틴을 요청하는 스레드가 메인 스레드일 경우 작업 대기열에 적재되지 않고 곧바로 메인 스레드에서 실행된다.
+
+<br>
 
 ## Job 객체를 활용한 코루틴 제어
 
