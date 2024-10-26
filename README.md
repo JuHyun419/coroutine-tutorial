@@ -164,8 +164,105 @@ val imageProcessingDispatcher = Dispatchers.Default.limitedParallelism(2)
 <br>
 
 ## Job 객체를 활용한 코루틴 제어
+### 코루틴 순차 처리
+
+![img_22.png](img_22.png)
+- '토큰 업데이트 후 네트워크 요청', '이미지 변환 후 업로드 요청' 같이 작업 간 선후 관계(종속성) 있는 작업들이 있다.
+- 이런 작업들이 순차 처리가 안된다면, 문제가 발생한다.
+    - 토큰 업데이특 되기 전 네트워크 요청이 온다면? 401에러 발생
+
+![img_23.png](img_23.png)
+- Job 의 `join` 함수를 사용 -> join 함수 호출부의 코루틴을 join 함수의 대상이 되는 코루틴이 완료될때까지 일시중단
+- joinAll -> 복수의 코루틴 순차 처리
+```joinAll(Job1, Job2, ...)```
+
+![img_24.png](img_24.png)
+
+### CoroutineStart.LAZY
+- 즉시 실행되지 않고 지연되는 코루틴  
+  - ```val lazyJob: Job = launch(start = CoroutineStart.LAZY)```
+- start(), join() 함수를 통해 실행 가능
+
+### 코루틴 취소
+- 코루틴 실행 도중, 더이상 코루틴을 실행할 필요가 없어지면 즉시 취소해야 한다.
+  - 취소하지 않으면 코루틴이 스레드를 계속 사용하기 때문에 애플리케이션의 성능 저하로 이어지기 때문
+  - ex) 사용자가 오래 걸리는 이미지 변환 작업을 요청한 후 취소한 경우
+- `cancel()` 코루틴 취소
+  - 코루틴을 곧바로 취소하지 않고, 취소 확인용 플래그를 '취소 요청됨'으로 바꾸는 역할만 한다.
+  - 이후 미래에 취소 확인용 플래그가 확인되는 시점에 코루틴이 취소된다.
+  - -> cancel 함수를 사용하는 것은 순차성 관점에서 중요한 문제
+- 따라서, `cancelAndJoin()` 함수를 사용
+  - 취소 요청한 후 취소가 완료될 때까지 호출 코루틴 일시 중단
+- `코루틴의 취소가 직관적이지 않은 문제는 실무에서 매우 치명적인 문제를 일으키는 경우가 많기에 매우 중요하다.`
+
+### 코루틴 취소 확인 시점
+- 코루틴이 취소를 확인하는 시점은 다음 두가지
+  - 일시 중단 시점 
+  - 코루틴이 실행을 대기하는 시점
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    var count = 0
+    val whileJob: Job = launch(Dispatchers.Default) {
+        while(this.isActive) { // Coroutine.isActive -> count: 85000
+//        while(true) {
+            count++
+            println(count)
+            // delay(1L) count: 80
+            // yield() count: 48900
+        }
+    }
+    delay(100L) // 100밀리초 대기
+    whileJob.cancel() // 코루틴 취소
+}
+```
+
+- delay 함수를 사용하면 일시 중단 시점을 만들 수 있지만, 일정 시간 동안 스레드를 양보하기 때문에 비효율적 (count: 80)
+- yield 함수를 사용하면 일시 중단 시점을 만든 후 곧바로 재개 요청되기 때문에 delay 함수보다는 효율적 (count: 48900)
+- 하지만, 위 두 함수 모두 일시 중단 시점을 만들어 재개 되는 과정을 거치기 때문에 비효율적
+- CoroutineScope 의 isActive 확장 프로퍼티를 사용하면 코루틴을 일시 중단 시키지 않고 취소를 확인할 수 있다. (count: 85000)
+
+### 코루틴의 상태와 Job 객체의 상태 변수
+![img_25.png](img_25.png)
+- 지연 코루틴(CoroutineStart.LAZY) -> 생성(New)
+- 코루틴 생성 후 출력 -> 실행 중(Active)
+- join() -> 실행 완료(Completed)
+- cancel() -> 취소 중(Cancelling)
+- cancelAndJoin() -> 취소 완료(Cancelled)
+
+![img_26.png](img_26.png)
+
+![img_27.png](img_27.png)
 
 
+![img_28.png](img_28.png)  
+Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접적으로 나타내는 세가지 상태 변수를 외부로 공개한다
+1. `isActive`: 코루틴이 활성화 되어 있는지 여부. 코루틴이 '실행 중' 상태일 때 true
+2. `isCancelled`: 코루틴에 취소가 요청됐는지 여부. (cancel) 취소 중인 상태도 포함
+3. `isCompleted`: 코루틴이 완료 되었는지 여부. 코루틴이 실행 완료 되거나 취소 완료되면 true
+
+### 요약
+#### 코루틴 순차 처리
+- Job 객체의 join 함수를 사용해 코루틴 순차 처리를 할 수 있다.
+- join 함수를 호출한 코루틴을 join의 대상이 된 코루틴이 완료될 때까지 일시 중단시킨다.
+- joinAll 함수를 사용해 복수의 코루틴에 대해 순차 처리가 가능하다.
+
+#### CoroutineStart.LAZY 지연 코루틴
+- launch(start = CoroutineStart.LAZY)
+- start, join 함수가 호출될 때까지 실행 요청되지 않는다.
+
+#### 코루틴 취소
+- cancel 함수 -> 취소 확인용 플래그 변경
+- cancelAndJoin 함수 -> 함수를 호출한 코루틴을 취소가 완료될 때까지 일시 중단할 수 있다.
+
+#### 코루틴 취소 확인
+- delay(), yield(), CoroutineScope.isActive
+
+#### 코루틴 상태와 상태 변수
+- 생성(New), 실행 중(Active), 실행 완료 중 (Completing), 실행 완료(Completed), 취소 중(Cancelling), 취소 완료(Cancelled)
+- isActive, isCancelled, isCompleted
+
+<br>
 
 ## 코루틴으로부터 결과 수신 받기
 
