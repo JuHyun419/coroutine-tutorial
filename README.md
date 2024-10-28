@@ -265,8 +265,59 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 <br>
 
 ## 코루틴으로부터 결과 수신 받기
+### async-await, Deferred
+![img_29.png](img_29.png)
+- async 코루틴 빌더는 Deferred<T> 객체를 반환하고 결과값이 이 객체에 포함된다.
+- async 함수도 launch 함수와 대부분 비슷하나, 반환 타입의 차이점이 존재한다.
+- Deferred 객체는 미래의 어느 시점에 결과값이 반환될 수 있음을 표현하는 코루닡 객체
+  - 따라서 결과값이 필요하다면 결과값이 수신될 때까지 대기해야 한다. (await 함수)
+
+![img_30.png](img_30.png)
 
 
+### 복수의 코루틴으로부터 결과값 수신하기
+예) 콘서트를 주최하고 2개의 플랫폼에서 관람객 모집 후 모집된 관람객을 병합해 출력하기
+
+![img_32.png](img_32.png)
+- async-await 이 연속적으로 호출되면, 코루틴이 실행 완료되고 나서 다음 코드가 실행된다.
+
+![img_33.png](img_33.png)
+- 따라서, 코루틴을 모두 실행한 후 await() 을 호출해야 한다.
+- 혹은, awaitAll() 사용 가능
+  - ```val results = awaitAll(participantDeferred1, participantDeferred2)```
+
+### withContext 함수를 사용한 결과 수신
+- 인자로 받은 CoroutineDispatcher를 사용해 코루틴의 실행 스레드를 전환하고, 람다식의 코드를 실행한 후 결과값을 반환하는 함수
+  - 람다식 실행 후 스레드는 다시 이전의 Dispatcher를 사용하도록 전환된다.
+  - ```val result: String = withContext(Dispatchers.IO) { ...```
+
+![img_34.png](img_34.png)
+- async-await와 달리 withContext는 코루틴의 실행 스레드를 전환한다. -> 하나의 코루틴이 순차처리됨
+
+![img_35.png](img_35.png)
+- withContext -> 코루틴이 유지된 채 스레드만 바뀌기 때문에 이전 작업이 완료할 때까지 다음 작업이 진행되지 못하고 순차 처리가 된다.
+- `withContext` 는 간결하게 사용할 수 있지만, 잘못 사용할 경우 성능 문제를 일으킬 수 있기 때문에 잘 이해하고 사용해야 한다.
+
+### 섹션 요약
+#### async-await 을 통해 코루틴으로부터 결과 수신받기 
+- async 코루틴 빌더를 호출하면 코루틴이 생성되고, Deferred<T> 타입의 객체가 반환된다. 
+- Deferred 객체는 미래의 어느 시점에 결과값이 반환될 수 있음을 표현하는 코루틴 객체이다. 
+- Deferred 객체로부터 결과값을 수신하기 위해서는 await 함수를 호출하면 된다.
+#### Deferred
+- Deferred는 Job의 서브타입으로, 코루틴으로부터의 결과값 수신을 위해 몇가지 함수만 추가된 인터페이스이다. (await)
+- 따라서 Job의 모든 함수(join, cancel 등)와 프로퍼티(isActive, isCancelled 등)을 사용할 수 있다
+#### 복수의 코루틴으로부터 결과값 수신하기
+- 모든 코루틴을 실행한 후 await 함수를 호출해야 병렬 처리할 수 있다.
+- awaitAll 함수를 사용해 복수의 코루틴으로부터 결과값을 수신할 수 있다.
+#### withContext 함수를 사용한 결과 수신
+- withContext 함수는 인자로 받은 CoroutineDispatcher를 사용해 코루틴의 실행 스레드를 전환하고, 코드를 실행한 후
+결과값을 반환하는 함수이다. 
+- withContext를 사용하면 코루틴이 생성되지 않는다. 
+- 코루틴들이 병렬로 실행돼야 할 때는 withContext 함수를 사용하면 안된다. async를 사용해야 한다
+
+| 위 내용들은 실무에 정말 많이 사용되기 때문에 async vs withContext 동작원리를 꼭 기억하자!
+
+<br>
 
 ## CoroutineContext
 
