@@ -352,9 +352,108 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 - CoroutineContext 의 minusKey 함수를 통해 특정 구성 요소를 제거할 수 있다. 
   - 기존 객체는 그대로 유지, 구성 요소가 제거된 새로운 CoroutineContext 객체가 반환
 
+<br>
+
 ## 구조화된 동시성
+- 비동기 작업을 구조화해 비동기 프로그래밍을 보다 안정적이고, 예측 가능하게 만드는 원칙
+- 코루틴은 구조화된 동시성의 원칙을 사용해 비동기 작업인 코루틴을 부모-자식 관계로 구조화해 코루틴이 보다 안전하게 관리되고 제어될 수 있도록 한다.
+- 부모-자식 관계로 구조화하기 위해서는 코루틴 빌더 함수의 람다식 안에 새로운 코루틴 빌더 함수를 호출하기만 하면 된다.
 
+![img_37.png](img_37.png)
 
+### 실행 환경 상속
+- 부모 코루틴은 자식 코루틴에게 실행 환경을 상속한다.
+- 부모 코루틴이 자식 코루틴을 생성하면 부모 코루틴의 CoroutineContext 가 자식 코루틴에게 전달된다.
+
+#### 상속되지 않는 Job
+- launch나 async를 포함한 모든 코루틴 빌더 함수는 호출 시마다 코루틴 추상체인 Job 객체를 새롭게 생성한다.
+- 코루틴 제어에 Job 객체가 필요하기 때문에, Job 객체를 부모 코루틴으로부터 상속 받지 않는다.
+- 즉, 코루틴 빌더를 통해 생성된 코루틴들은 서로 다른 Job을 가진다.
+- Job 객체는 새로 생성되나 생성된 Job 객체는 내부에 정의된 parent 프로퍼티를 통해 부모 코루틴의 Job 객체에 대한 참조를 가진다.
+- 부모 코루틴의 Job 객체는 children 프로퍼티를 통해 자식 코루틴들의 Job 객체에 대한 참조를 가진다.
+  - parent -> Job? (부모 코루틴이 있을수도, 없을수도 있음)
+  - children -> Sequence<Job> (하나의 코루틴이 복수의 자식 코루틴을 가질 수 있음)
+
+### 코루틴의 구조화와 작업 제어
+![img_38.png](img_38.png)
+- 코루틴의 구조화는 하나의 큰 비동기 작업을 작은 비동기 작업으로 나눌 때 일어난다.
+- 여러 서버로부터 데이터를 받고, 합쳐진 데이터를 변환하는 비동기 작업의 예시
+
+#### 구조화된 코루틴의 특성 - 1. 취소의 전파
+- 코루틴으로 취소가 요청되면 자식 코루티에만 취소가 전파된다.
+  - 자식 -> 부모 (X)
+  - 부모 -> 다른 자식(X)
+![img_39.png](img_39.png)
+
+#### 구조화된 코루틴의 특성 - 2. 부모 코루틴의 자식 코루틴에 대한 완료 의존성
+- 부모 코루틴은 모든 자식 코루틴이 실행 완료되어야 완료될 수 있다.
+- 작은 작업(자식)이 완료돼야 큰 작업(부모)가 완료
+```kotlin
+    val startTime = System.currentTimeMillis()
+    val parentJob = launch { // 부모 코루틴 실행
+        launch { // 자식 코루틴 실행
+            delay(1000L) // 1초간 대기
+            println("[${getElapsedTime(startTime)}] 자식 코루틴 실행 완료")
+        }
+        println("[${getElapsedTime(startTime)}] 부모 코루틴이 실행하는 마지막 코드")
+    }
+    parentJob.invokeOnCompletion { // 부모 코루틴이 완료될 시 호출되는 콜백 등록
+        println("[${getElapsedTime(startTime)}] 부모 코루틴 실행 완료")
+    }
+```
+![img_40.png](img_40.png)
+
+- '실행 완료 중(Completing)' 상태는 부모 코루틴의 모든 코드가 실행됐지만, 자식 코루틴이 실행중인 경우 부모 코루틴이 갖는 상태
+- 즉, 자식 코루틴들이 모두 완료될 때까지 기다리는 상태
+- 자식 코루틴이 모두 완료되면, '실행 완료(Completed)' 상태로 바뀐다.
+
+![img_41.png](img_41.png)
+
+### TODO: CoroutineScope 사용해 코루틴 관리하기
+
+### TODO: 구조화와 Job
+
+### runBlocking 함수의 이해
+- runBlocking 함수가 호출되면 호출부의 스레드를 차단하고 배타적으로 사용하는 코루틴이 만들어진다.
+  - 호출부의 스레드를 사용할 수 있는 코루틴은 자신과 자식 코루틴들 뿐이다.
+- 호출부의 스레드는 runBlocking 함수가 생성한 코루틴이 실행 완료될 때까지 다른 작업에 사용될 수 없다.
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    delay(5000L)
+    println("[${Thread.currentThread().name}] 코루틴 종료")
+}
+```
+![img_42.png](img_42.png)
+
+1. 메인스레드에서 runBlocking 함수가 호출되어 파란색 runBlocking 코루틴 생성
+2. runBlocking 코루틴은 delay(5000L) 으로 인해 5초간 일시 중단
+3. 이 사이(5초간) runBlocking이 실행되는 구간에서 메인 스레드는 다른 작업이 실행될 수 없도록 차단
+   - 일반적인 스레드 차단은 스레드가 어떤 작업에도 사용될 수 없는 것을 뜻하는데,
+   - 여기서의 차단은 runBlocking 코루틴과 자식 코루틴들을 제외한 다른 작업이 스레드를 사용할 수 없게 만드는 차단
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    val startTime = System.currentTimeMillis()
+
+    launch {
+        delay(1000L)
+        println("[${Thread.currentThread().name}] launch 코루틴 종료 ::: ${getElapsedTime(startTime)}")
+    }
+    delay(2000L)
+    println("[${Thread.currentThread().name}] runBlocking 코루틴 종료 ::: ${getElapsedTime(startTime)}")
+}
+
+private fun getElapsedTime(startTime: Long): String = "지난 시간: ${System.currentTimeMillis() - startTime}ms"
+```
+![img_43.png](img_43.png)
+launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocking 코루틴이 점유한 메인 스레드를 사용할 수 있음
+
+1. runBlocking 코루틴이 launch 함수를 호출하면, launch 코루틴이 생성되고 이어서 runBlocking 코루틴은 delay(2000L) 으로 인해 2초간 메인 스레드가 양보되는데, 이 때 launch 코루틴이 메인 스레드를 점유해 사용
+2. launch 코루틴도 1초간 일시 중단 후 메인 스레드를 점유해 launch 코루틴 종료를 출력하고 완료
+3. 그 후 2초의 일시 중단을 끝낸 runBlocking 코루틴이 재개돼 종료 출력 후 완료
+
+![img_44.png](img_44.png)
 
 ## 예외 처리
 
