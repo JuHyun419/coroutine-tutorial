@@ -320,8 +320,37 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 <br>
 
 ## CoroutineContext
+### CoroutineContext 구성요소
+- CoroutineName: 코루틴 이름 설정에 사용되는 객체
+- CoroutineDispatcher: 코루틴을 스레드에 보내서 실행하는 객체
+- Job: 코루틴의 추상체로 코루틴을 조작하는데 사용되는 객체
+- CoroutineExceptionHandler: 코루틴에서 발생된 예외를 처리
 
+### CoroutineContext 구성하기
+- CoroutineContext 객체는 구성요소에 대해 key-value 쌍으로 요소를 관리한다.
+- 구성 요소를 추가하기 위해서는 더하기 연산자를 사용하면 되는데, 키에 값을 직접 대입하는 방법을 사용하지 않기 때문
+  - ```val coroutineContext = newSingleThreadContext("MyThread") + CoroutineName("MyCoroutine")```
+- 같은 구성 요소가 둘 이상 더해지면, 나중에 추가된 구성요소가 이전 값을 덮어씌운다.
 
+### CoroutineContext 구성요소에 접근하기
+![img_36.png](img_36.png)
+- CoroutineContext 구성요소의 키는 각각의 Key 인터페이스를 통해 실글톤 객체로 구현된다.
+  - ```public companion object Key : CoroutineContext.Key<CoroutineName>```
+  - ```public companion object Key : CoroutineContext.Key<Job>```
+  - ...
+
+### CoroutineContext 구성 요소 제거하기
+- `minusKey()` 함수를 호출하고, 구성요소의 키를 전달
+
+### 섹션 요약
+#### CoroutineContext
+- CoroutineName, CoroutineDispatcher, Job, CoroutineExceptionHandler
+- CoroutineContext 객체는 구성 요소에 대해 Key-Value 쌍으로 관리
+- CoroutineContext 객체에 구성 요소를 추가하기 위해서는 더하기 연산자(+)를 사용
+- CoroutineContext 동일 요소가 추가되면, 이전 요소는 덮어씌워진다.
+- CoroutineContext 구성 요소에 접근하기 위해서 get 함수의 Key를 넘긴다. (생략 가능)
+- CoroutineContext 의 minusKey 함수를 통해 특정 구성 요소를 제거할 수 있다. 
+  - 기존 객체는 그대로 유지, 구성 요소가 제거된 새로운 CoroutineContext 객체가 반환
 
 ## 구조화된 동시성
 
