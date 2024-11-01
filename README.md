@@ -409,9 +409,48 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 
 ![img_41.png](img_41.png)
 
-### TODO: CoroutineScope 사용해 코루틴 관리하기
+### CoroutineScope 사용해 코루틴 관리하기
+![img_50.png](img_50.png)
 
-### TODO: 구조화와 Job
+```kotlin
+fun main() {
+    val newScope = CoroutineScope(CoroutineName("MyCoroutine") + Dispatchers.IO)
+    newScope.launch(context = CoroutineName("LaunchCoroutine")) {
+        println("newScope의 coroutineContext: ${newScope.coroutineContext}")
+        println("launch 코루틴의 coroutineContext: ${this.coroutineContext}")
+        println("launch 코루틴의 parentJob: ${this.coroutineContext[Job]?.parent}")
+    }
+    Thread.sleep(1000L)
+}
+
+/*
+newScope의 coroutineContext: [CoroutineName(MyCoroutine), JobImpl{Active}@1e904cc, Dispatchers.IO]
+launch 코루틴의 coroutineContext: [CoroutineName(LaunchCoroutine), StandaloneCoroutine{Active}@5882160d, Dispatchers.IO]
+launch 코루틴의 parentJob: JobImpl{Active}@1e904cc
+ */
+```
+![img_51.png](img_51.png)
+
+#### CoroutineScope에 속한 코루틴 범위
+![img_52.png](img_52.png)
+- CoroutineScope 객체는 특정 범위의 코루틴을 제어하는 역할을 한다. (Job 객체를 통해)
+
+### 구조화와 Job
+- runBlocking 함수를 호출하면 부모 Job이 없는 루트 Job 객체가 생성된다.
+  - 루트 Job: 부모 Job 객체가 없는 구조화의 시작점 역할을 하는 Job 객체
+  - 루트 코루틴: 이 Job 객체에 의해 제어되는 코루틴
+```kotlin
+fun main() = runBlocking<Unit> { // 루트 코루틴(루트 Job) 생성
+    println("...")
+}
+```
+
+#### Job 구조화 깨는 법 - CoroutineScope, Job 객체 생성
+![img_53.png](img_53.png)
+- runBlocking 코루틴이 종료되면 메인 스레드도 종료되어서, 구조화가 깨진 newScope 는 출력되지 않음
+
+![img_54.png](img_54.png)
+- Job 객체를 활용하여 구조화를 깰 수 있고, 일부 코루틴에 대한 제어가 가능함
 
 ### runBlocking 함수의 이해
 - runBlocking 함수가 호출되면 호출부의 스레드를 차단하고 배타적으로 사용하는 코루틴이 만들어진다.
@@ -455,8 +494,34 @@ launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocki
 
 ![img_44.png](img_44.png)
 
-## 예외 처리
+### 섹션 요약
+- 구조화된 동시성의 원칙이란 비동기 작업을 구조화함으로써 비동기 프로그래밍을 보다 안정적이고 예측할 수 있게 만드는 원칙이다.
 
+#### 실행 환경 상속
+- 부모 코루틴은 자식 코루틴에게 실행 환경을 상속한다.
+- 코루틴 빌더 함수의 인자로 CoroutineContext가 전달되면 부모 코루틴의 실행 환경을 덮어 씌울 수 있다.
+- 코루틴 빌더 함수 호출시 Job은 상속되지 않고, 새롭게 생성된다. 이때 기존의 Job은 새롭게 생성되는 Job의 부모가 된다.
+
+#### 코루틴의 구조화와 작업 제어
+- 코루틴에 취소가 요쵱더면, 자식 코루틴에 취소가 전파된다.
+- 부모 코루틴은 자식 코루틴이 완료될 때까지 완료되지 않는다.
+- 부모 코루틴이 실행해야 할 코드가 모두 실행됐는데 자식 코루틴이 실행 중이라면, 부모 코루틴은 '실행 완료 중(Completing)' 상태를 가진다.
+
+#### CoroutineScope 사용해 코루틴 관리하기
+- CoroutineScope 인터페이스는 CoroutineContext 를 가진 인터페이스
+- launch, async 함수가 호출될 때 CoroutineScope으로부터 실행 환경을 상속 받아 코루틴이 실행된다.
+- CoroutineScope 객체를 사용해 특정 범위의 코루틴을 제어할 수 있다.
+
+#### 코루틴의 구조화와 Job
+- Job의 구조화가 제어에 핵심 역할을 한다.
+- CoroutineScope 생성 함수나, Job 생성 함수를 사용해 코루틴의 구조화를 깰 수 있다.
+- Job 생성 함수에 부모 Job을 설정할 수 있고, 이로 생성된 Job은 자동으로 실행 완료가 되지 않기에 complete 함수를 명시적으로 호출해야 한다.
+
+| 코루틴의 구조화를 이해하는 것은, 안정적인 코루틴 코드를 작성하는데 필수적이고, 코드가 예상치 못한 오류가 나지 않게 만들어준다.
+
+<br>
+
+## 예외 처리
 
 
 ## 일시 중단 함수
