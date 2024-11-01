@@ -522,7 +522,176 @@ launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocki
 <br>
 
 ## 예외 처리
+> 목표: 코루틴이 예외를 전파하는 것을 이해하고, 예외 전파를 제한하는 방법을 알고, 예외를 처리하는 방법을 안다.
+- 코루틴은 비동기 작업을 처리하는 작업 단위이기 때문에 네트워크 요청이나 데이터베이스 입출력 작업 등에 자주 쓰여 예외가 발생할 가능성이 높다.
+- 따라서 코루틴에 대한 적절한 예외 처리는 안정적인 애플리케이션을 만들기 위해 매우 중요하다.
 
+### 예외 전파
+- 코루틴 실행 도중 예외가 발생하면 예외가 발생한 코루틴이 취소되고, 예외가 부모 코루틴으로 전파된다 -> 다시 자식 코루틴들로 취소가 전파된다.
+- 따라서, 모든 코루틴의 작업이 취소될 수 있다.
+![img_45.png](img_45.png)
+
+### 예외 전파 제한하기
+1. 코루틴의 구조화를 깨서 예외 전파를 제한하기
+![img_46.png](img_46.png)
+- 단순히 Job 객체를 새로 만들어 구조화를 깨고 싶은 코루틴에 연결화면 구조화가 깨진다.
+
+![img_47.png](img_47.png)
+- 하지만 코루틴의 구조화가 깨지면, 예외 전파 뿐만 아니라 취소 전파도 제한된다.
+- 위에서 parentJob 코루틴에 취소 요청을 했기에, 구조화가 깨진 Coroutine1, Coroutine3 에는 취소가 안된다.
+- Coroutine 구조화를 깨는 것은, 코루틴의 비동기 작업을 불안정하게 만들 수 있다.
+
+2. SupervisorJob 을 사용한 예외 전파 제한
+- SupervisorJob 객체는 자식 코루틴으로부터 예외를 전파 받지 않는 특수한 Job 객체이다
+  - 예외를 전파 받지 않아 자식 코루틴에서 예외가 발생하더라도 취소되지 않는다
+- SupervisorJob 객체는 자식 코루틴에서 발생한 예외가 다른 자식 코루틴에게 영향을 미치지 못하게 만드는데 사용된다
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    val supervisorJob = SupervisorJob()
+    launch(CoroutineName("Coroutine1") + supervisorJob) {
+        launch(CoroutineName("Coroutine3")) {
+            throw Exception("예외 발생")
+        }
+        delay(100L)
+        println("[${Thread.currentThread().name}] 코루틴 실행1")
+    }
+    launch(CoroutineName("Coroutine2") + supervisorJob) {
+        delay(100L)
+        println("[${Thread.currentThread().name}] 코루틴 실행2")
+    }
+    delay(1000L)
+}
+```
+![img_48.png](img_48.png)
+![img_49.png](img_49.png)
+- 하지만 SupervisorJob 은 runBlocking 와의 구조화를 깨는 문제점이 있다.
+- 이 문제를 해결하려면, SupervisorJob 인자로 runBlocking 코루틴의 Job 을 넘기면 된다.
+  - ```val supervisorJob = SupervisorJob(parent = this.coroutineContext[Job])```
+- SupervisorJob 은 자동 완료 처리 되지 않기 때문에, complete() 함수를 호출해 명시적으로 완료시켜줘야 한다.
+
+3. supervisorScope을 사용한 예외 전파 제한
+![img_55.png](img_55.png)
+
+### CoroutineExceptionHandler 사용하 예외 처리하기
+#### CoroutineExceptionHandler 란?
+- CoroutineExceptionHandler는 CoroutineContext의 구성 요소 중 하나이다.
+- CoroutineExceptionHandler는 처리되지 않은 예외만 처리한다.
+- CoroutineExceptionHandler는 launch 코루틴으로 시작되는 코루틴 계층의 공통 예외 처리기로 동작하는 구성요소이다.
+
+![img_56.png](img_56.png)
+- 예외가 발생했을 때 수행할 동작
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    val exceptionHandler = CoroutineExceptionHandler { coroutineContext, throwable ->
+        println("[예외 발생] ::: $throwable")
+    }
+    CoroutineScope(context = exceptionHandler)
+        .launch(CoroutineName("Coroutine1")) {
+            launch(CoroutineName("Coroutine2")) {
+                throw Exception("Coroutine2에 예외가 발생했습니다")
+            }
+        }
+    delay(1000L)
+}
+
+// [예외 발생] ::: java.lang.Exception: Coroutine2에 예외가 발생했습니다
+```
+![img_57.png](img_57.png)
+
+#### 처리되지 않은 예외 처리만 하는 CoroutineExceptionHandler
+- CoroutineExceptionHandler는 처리되지 않은 예외만 처리한다.
+- 만약 launch 코루틴이 다른 launch 코루틴으로 예외를 전파하면, 예외가 처리된 것으로 보기 때문에 자식 코루틴에 설정된 CoroutineExceptionHandler는 동작하지 않는다.
+
+```kotlin
+fun main() = runBlocking<Unit> {
+    val exceptionHandler = CoroutineExceptionHandler { coroutineContext, throwable ->
+        println("[예외 발생] ::: $throwable")
+    }
+    CoroutineScope(Dispatchers.IO)
+        .launch(CoroutineName("Coroutine1")) {
+            launch(CoroutineName("Coroutine2") + exceptionHandler) {
+                throw Exception("Coroutine2에 예외가 발생했습니다")
+            }
+        }
+    delay(1000L)
+}
+```
+![img_58.png](img_58.png)
+![img_59.png](img_59.png)
+
+- CoroutineExceptionHandler는 launch 코루틴으로 시작되는 코루틴 계층의 공통 예외 처리기로 동작하는 구성요소이다.
+![img_60.png](img_60.png)
+
+
+CoroutineExceptionHandler는 예외를 로깅하거나, 오류 메시지를 표시하기 위해 구조화된 코루틴들에 공통으로 동작하는 예외 처리기를 설정해야 하는 경우 사용
+```kotlin
+fun main() = runBlocking<Unit> {
+    val exceptionHandler = CoroutineExceptionHandler { coroutineContext, throwable ->
+        println("[예외 로깅] ::: $throwable")
+    }
+
+    CoroutineScope(Dispatchers.IO)
+        .launch(CoroutineName("Coroutine1") + exceptionHandler) {
+            launch(CoroutineName("Coroutine2")) {
+                throw Exception("Coroutine2에 예외가 발생했습니다")
+            }
+            launch(CoroutineName("Coroutine3")) {
+                // 다른 작업
+            }
+        }
+
+    delay(1000L)
+}
+// [예외 로깅] ::: java.lang.Exception: Coroutine2에 예외가 발생했습니다
+```
+
+### try catch 문을 사용해 코루틴에서 발생한 예외 처리
+![img_61.png](img_61.png)
+
+![img_62.png](img_62.png)
+
+### async 예외 처리
+![img_63.png](img_63.png)
+
+![img_64.png](img_64.png)
+
+- 위의 경우, supervisorScope 를 사용하여 예외 전파를 막을 수 있다.
+
+### 전파되지 않은 예외 - CancellationException
+![img_65.png](img_65.png)
+- CancellationException은 코루틴의 취소에 사용되는 특별한 예외이기 때문에 전파되지 않는다.
+
+### 섹션 요약
+- 코루틴에 대한 적절한 예외 처리는 안정적인 애플리케이션을 만들기 위해 매우 중요하다.
+
+#### 예외 전파
+- 코루틴에서 발생한 예외는 부모 코루틴으로 전파된다.
+- 예외를 전파받은 코루틴이 취소되면 해당 코루틴의 모든 자식 코루틴에 취소가 전파된다.
+
+#### 예외 전파 제한하기
+- 새로운 루트 Job 객체를 통해 코루틴의 구조화를 깨서 코루틴의 예외 전파를 제한할 수 있다.
+- SupervisorJob 객체를 사용해 예외 전파를 제한할 수 있다.
+- supervisorScope 함수를 사용해 구조화를 깨지 않고 예외 전파를 제한할 수 있다.
+
+#### CoroutineExceptionHandler 사용해 예외 처리하기
+- CoroutineExceptionHandler 객체는 공통 예외 처리기로 동작하고, 이미 처리된 예외에 대해서는 동작하지 않는다.
+- CoroutineExceptionHandler 는 예외 전파를 제한하지 않는다.
+
+#### try catch문을 사용한 예외 처리
+- 코루틴 내부에서 try catch 문을 사용해 예외를 처리할 수 있다.
+- 코루틴 빌더 함수에 대한 try catch문은 코루틴에서 발생한 예외를 처리하지 못한다. (실행 컨텍스트 다름)
+
+#### async 예외 처리
+- async 함수로 생성된 코루틴에서 발생한 예외는 await 호출 시 노출된다.
+- async 코루틴에서 발생한 예외 또한 부모 코루틴으로 전파된다.
+
+#### 전파 되지 않는 예외
+- CancellationException 은 부모 코루틴으로 전파되지 않는다.
+- CancellationException이 전파되지 않는 이유는 CancellationException이 코루틴을 취소하기 위한 특별한 예외이기 때문이다
+
+<br>
 
 ## 일시 중단 함수
 
