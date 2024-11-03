@@ -820,7 +820,135 @@ fun main() = runBlocking<Unit> {
 <br>
 
 ## 코루틴 심화
+### 공유 상태를 사용하는 코루틴의 문제와 해결책
+#### 가변 변수를 사용할 때의 문제점
+- 스레드 간에 데이터를 전달하거나 자원을 공유하는 경우에는 가변 변수를 통해 상태를 공유하고 업데이트 해야 한다
+- 이런 경우 여러 스레드에서 가변 변수에 동시에 접근해 값을 변경하면 데이터의 손실이나 불일치로 버그가 발생할 수 있다.
+```kotlin
+var count = 0
 
+fun main() = runBlocking<Unit> {
+    withContext(Dispatchers.Default) {
+        repeat(10_000) {
+            launch {
+                count += 1
+            }
+        }
+    }
+    println("count = $count")
+}
 
+// count = 9289
+// count = 9094
+// count = 9686
+```
+
+![img_82.png](img_82.png)
+- JVM 스택 영역 -> 원시 타입의 데이터, 지역 변수, 힙 영역에 저장된 객체에 대한 참조가 저장
+- 힙 영역 -> JVM 에 올라간 스레드들에서 공통으로 사용되는 메모리 공간으로 객체, 배열 등이 저장
+- 각 CPU는 CPU 캐시 메모리를 중간에 두고, 데이터 조회 시 메인 메모리까지 가지 않고 캐시 메모리를 조회하여 접근 속도 향상 (가시성 문제)
+
+#### 공유 상태의 메모리 가시성 문제
+- 공유 상태의 메모리 가시성 문제란, 하나의 스레드가 다른 스레드가 변경한 상태를 확인하지 못하는 문제이다.
+- 이 문제는 서로 다른 CPU에서 실행되는 스레드들에서 공유 상태를 조회하고 업데이트 할 때 생긴다.
+
+![img_83.png](img_83.png)
+- 업데이트 되지 않은 캐시 메모리로 인해 데이터 불일치 발생
+- 이를 위해 volatile(@Volatile) 어노테이션을 통해 가시성 확보 (CPU 캐시 메모리를 사용하지 않고, 메인 메모리 사용)
+- 하지만 위의 문제는 여러 스레드가 동시에 메인 메모리에 접근하여 경쟁 상태 (Race Condition) 문제가 발생하여 여전히 데이터 불일치가 발생함
+
+#### 경쟁 상태 문제 해결 방법 - 1. Mutex 사용
+- 공유 변수의 변경 가능 지점을 임계 영역(Critical Area)으로 만들어 동시 접근을 제한할 수 있다.
+- 코루틴이 Mutex 객체의 lock 일시 중단 함수를 호출하면 락이 획득되며, 이후 해당 Mutex 객체에 대해 unlock이 호출될 때까지
+  다른 코루틴이 해당 임계 영역에 진입할 수 없다.
+- ReentrantLock의 lock 함수는 만약 특정 스레드에서 락을 획득했다면, 다른 스레드에서 lock 함수를 호출할 경우
+  해당 스레드를 락이 해제될 때까지 블로킹 시킨다. 
+- Mutex의 lock 함수는 일시 중단 함수로, 만약 특정 코루틴이 락을 획득했다면, 다른 코루틴에서 lock 함수를 호출할 경우
+  해당 코루틴은 락이 해제될 때까지 일시 중단됨(스레드 블로킹X)
+
+```kotlin
+// ...
+
+launch {
+    mutex.withLock {
+        count2 += 1
+    }
+}
+```
+
+#### 경쟁 상태 문제 해결 방법 - 2. 전용 스레드 사용
+- 공유 상태 접근 시 하나의 스레드(전용 스레드)만 사용하면 경쟁 상태 문제를 해결할 수 있다
+```newSingleThreadContext("전용 스레드")```
+
+#### 경쟁 상태 문제 해결 방법 - 3. 원자성 있는 데이터 구조 사용
+- 원자성 있는 객체는 여러 스레드가 동시에 접근하더라도 안전하게 값을 변경하거나 읽을 수 있도록 하는 객체
+- Atomic... 변수 (CAS)
+- 스레드가 블로킹 될 수 있음
+
+### 코루틴 실행 옵션
+![img_84.png](img_84.png)
+
+![img_85.png](img_85.png)
+
+#### DEFAULT vs ATOMIC vs UNDISPATCHED
+![img_86.png](img_86.png)
+![img_87.png](img_87.png)
+![img_88.png](img_88.png)
+
+### 무제한 디스패처 (잘 사용하지 않음)
+![img_89.png](img_89.png)
+
+![img_90.png](img_90.png)
+
+### 코루틴에서 일시 중단과 재개가 일어나는 원리
+#### Continuation Passing Style (CPS)
+- 코루틴은 Continuation Passing Style 이라 불리는 프로그래밍 방식을 통해 실행 정보를 저장하고 전달한다.
+  - 이어서 하는 작업(Continuation)을 전달하는(Passing) 방식(Style)
+
+![img_91.png](img_91.png)
+- 코루틴의 일시 중단 시점에 남은 작업 정보가 Continuation 객체에 저장된다
+- Continuation의 resumeWith 함수가 호출되면 저장된 작업 정보가 복원돼 남은 작업들이 마저 실행된다.
+  즉, resumeWith 함수는 코루틴의 재개를 일으킨다.
+
+![img_92.png](img_92.png)
+
+![img_93.png](img_93.png)
+
+### Continuation Passing Style - Compile
+![img_94.png](img_94.png)
+1. suspend keyword를 통해 파라미터에 Continuation을 넣는다.
+2. Continuation 초기화
+3. switch문으로 suspension point마다 case 추가
+4. label을 통해 실행
+5. 실행 전 Coroutine의 실패 여부 확인
+6. label을 다음 실행할 label로 먼저 올린다.
+7. suspend function 실행  
+> 참고: https://www.youtube.com/watch?v=Zrq-3ayGddM&list=PLdHtZnJh1KdY3gEi7EPa2AuWn5NKRVmDf&index=8
+
+Continuation 을 직접 다루려면 suspendCancellableCoroutine 을 활용
+
+### 섹션 요약
+#### 공유 상태를 사용하는 코루틴의 문제와 해결책
+- 멀티스레드 환경에서 실행되는 복수 코루틴이 공유 상태를 사용하면 메모리 가시성 문제나 경쟁 상테 문제가 발생할 수 있다.
+- 메모리 가시성 문제는 CPU 캐시와 메인 메모리 간 데이터 불일치로 발생하며, `@Volatile` 을 공유 상태에 설정하여 해결 할 수 있다.
+- 경쟁 상태는 복수 스레드가 동시에 데이터 읽고 쓸때 발생한다.
+- 코루틴에서는 `Mutex` 객체를 사용해 복수의 코루틴이 특정 코드 블록에 동시 접근하는 것을 막을 수 있다.
+- 경쟁 상태 문제를 해결하는 다른 방법은 공유 상태를 읽고 쓰기 위한 전용 쓰레드를 사용하는 것이다.
+- AtomicInteger 같은 원자성 있는 자료 구조를 사용해 경쟁 상태 문제를 해결할 수 있다.
+
+#### 코루틴 실행 옵션
+- CoroutineStart.ATOMIC: 생성 상태의 코루틴이 취소되지 않게 한다.
+- CoroutineStart.UNDISPATCHED: 코루틴이 스레드로 보내지는 과정(Dispatch)을 거치지 않고 코루틴 빌더를 호출한 스레드에서 즉시 실행되게 한다.
+
+#### 무제한 디스패처
+- 무제한 디스패처는 코루틴을 자신을 실행시킨 스레드에서 즉시 실행되게 한다.
+
+#### 코루틴에서 일시 중단과 재개가 일어나는 원리
+- 코루틴은 `CPS(Continuation Passing Style)` 이라 불리는 프로그래밍 방식을 통해 실행 정보를 저장하고 전달한다.
+- 일시 중단될 때 `Continuation` 객체에 실행 정보가 저장되고, Continuation 의 `resumeWith` 함수가 호출되면 재개된다.
+- 코루틴 라이브러리의 고수준 API는 Continuation 객체를 외부로 노출하지 않아, 거의 접할 일이 없다. (컴파일 시 내부적으로 생성)
+- suspendCancellableCoroutine 일시 중단 함수를 사용하면 Continuation을 직접 다루는 코드를 만들 수 있다.
+
+<br>
 
 ## 코루틴 테스트
