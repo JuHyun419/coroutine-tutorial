@@ -952,3 +952,34 @@ Continuation 을 직접 다루려면 suspendCancellableCoroutine 을 활용
 <br>
 
 ## 코루틴 테스트
+### 테스트 더블
+- 테스트 더블은 객체에 대한 대체물로, 객체들의 행동을 모방하는 객체
+- 다른 객체와의 의존성을 가진 객체를 테스트하기 위해 테스트 더블이 필요함
+- 테스트 더블의 종류로는 스텁(Stub), 페이크(Fake), 목(Mock) 등이 있다.
+#### 스텁(Stub)
+- 미리 정의된 데이터를 반환하는 모방 객체
+- 반환 값이 없는 함수는 구현하지 않고, 반환 값이 있는 동작만 미리 정의된 데이터를 반환하도록 구현한다.
+![img_95.png](img_95.png)
+- 스텁을 만들 때 미리 정의된 데이터를 내부 프로퍼티로 고정하면 유연하지 못해진다.
+- 미리 정의된 데이터를 주입 받는 형태로 만들어야 한다.
+![img_96.png](img_96.png)
+
+#### 페이크(Fake)
+- 실제 객체와 비슷하게 동작하도록 구현된 모방 객체
+![img_97.png](img_97.png)
+
+### 코루틴 단위 테스트
+- 코루틴에서 runBlocking 함수를 사용해 실행에 오랜 시간이 걸리는 일시 중단 함수(delay)를 테스트하면 문제가 생기낟.
+- delay 만큼 시간이 지연된다는 점 -> TestCoroutineScheduler 을 사용해 해결할 수 있다.
+
+### TestCoroutineScheduler + StandardTestDispatcher 를 통해 가상 시간에서 테스트 진행하기
+- 코루틴 테스트 라이브러리는 TestCoroutineScheduler 객체를 통해 가상 시간에서 테스트를 진행할 수 있도록 하는 기능을 제공한다.
+- TestCoroutineScheduler 객체를 사용하면 시간을 자유 자재로 다룰 수 있다
+![img_98.png](img_98.png)
+
+- TestCoroutineScheduler의 advanceUntilIdle 함수가 호출되면 가상 시간 스캐쥴러를 사용하는 모든 코루틴이 완료될 때까지
+  시간이 흐른다. (하위 코루틴이 모두 실행되게 만드는 함수)
+- TestScope, rutTest 를 활용하면 더 간결한 코드를 작성할 수 있다.
+![img_99.png](img_99.png)
+![img_100.png](img_100.png)
+![img_101.png](img_101.png)
