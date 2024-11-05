@@ -269,7 +269,7 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 ![img_29.png](images/img_29.png)
 - async 코루틴 빌더는 Deferred<T> 객체를 반환하고 결과값이 이 객체에 포함된다.
 - async 함수도 launch 함수와 대부분 비슷하나, 반환 타입의 차이점이 존재한다.
-- Deferred 객체는 미래의 어느 시점에 결과값이 반환될 수 있음을 표현하는 코루닡 객체
+- Deferred 객체는 미래의 어느 시점에 결과값이 반환될 수 있음을 표현하는 코루틴 객체
   - 따라서 결과값이 필요하다면 결과값이 수신될 때까지 대기해야 한다. (await 함수)
 
 ![img_30.png](images/img_30.png)
@@ -279,7 +279,8 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 예) 콘서트를 주최하고 2개의 플랫폼에서 관람객 모집 후 모집된 관람객을 병합해 출력하기
 
 ![img_32.png](images/img_32.png)
-- async-await 이 연속적으로 호출되면, 코루틴이 실행 완료되고 나서 다음 코드가 실행된다.
+![img.png](images/img_102.png)
+- async-await 이 연속적으로 호출되면, 코루틴이 실행 완료되고 나서 다음 코드가 실행된다. -> Blocking
 
 ![img_33.png](images/img_33.png)
 - 따라서, 코루틴을 모두 실행한 후 await() 을 호출해야 한다.
@@ -380,9 +381,9 @@ Job 객체는 코루틴을 추상화한 객체로 코루틴의 상태를 간접�
 - 여러 서버로부터 데이터를 받고, 합쳐진 데이터를 변환하는 비동기 작업의 예시
 
 #### 구조화된 코루틴의 특성 - 1. 취소의 전파
-- 코루틴으로 취소가 요청되면 자식 코루티에만 취소가 전파된다.
+- 코루틴으로 취소가 요청되면 자식 코루틴에만 취소가 전파된다.
   - 자식 -> 부모 (X)
-  - 부모 -> 다른 자식(X)
+  - 부모 -> 다른 자식(X)  
 ![img_39.png](images/img_39.png)
 
 #### 구조화된 코루틴의 특성 - 2. 부모 코루틴의 자식 코루틴에 대한 완료 의존성
@@ -485,8 +486,8 @@ fun main() = runBlocking<Unit> {
 
 private fun getElapsedTime(startTime: Long): String = "지난 시간: ${System.currentTimeMillis() - startTime}ms"
 ```
-![img_43.png](images/img_43.png)
-launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocking 코루틴이 점유한 메인 스레드를 사용할 수 있음
+![img_43.png](images/img_43.png)  
+launch 코루틴은 runBlocking 코루틴의 자식 코루틴이기에 runBlocking 코루틴이 점유한 메인 스레드를 사용할 수 있음
 
 1. runBlocking 코루틴이 launch 함수를 호출하면, launch 코루틴이 생성되고 이어서 runBlocking 코루틴은 delay(2000L) 으로 인해 2초간 메인 스레드가 양보되는데, 이 때 launch 코루틴이 메인 스레드를 점유해 사용
 2. launch 코루틴도 1초간 일시 중단 후 메인 스레드를 점유해 launch 코루틴 종료를 출력하고 완료
@@ -503,7 +504,7 @@ launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocki
 - 코루틴 빌더 함수 호출시 Job은 상속되지 않고, 새롭게 생성된다. 이때 기존의 Job은 새롭게 생성되는 Job의 부모가 된다.
 
 #### 코루틴의 구조화와 작업 제어
-- 코루틴에 취소가 요쵱더면, 자식 코루틴에 취소가 전파된다.
+- 코루틴에 취소가 요청되면, 자식 코루틴에 취소가 전파된다.
 - 부모 코루틴은 자식 코루틴이 완료될 때까지 완료되지 않는다.
 - 부모 코루틴이 실행해야 할 코드가 모두 실행됐는데 자식 코루틴이 실행 중이라면, 부모 코루틴은 '실행 완료 중(Completing)' 상태를 가진다.
 
@@ -528,11 +529,11 @@ launch 코루틴은 runBLocking 코루틴의 자식 코루틴이기에 runBlocki
 
 ### 예외 전파
 - 코루틴 실행 도중 예외가 발생하면 예외가 발생한 코루틴이 취소되고, 예외가 부모 코루틴으로 전파된다 -> 다시 자식 코루틴들로 취소가 전파된다.
-- 따라서, 모든 코루틴의 작업이 취소될 수 있다.
+- 따라서, 모든 코루틴의 작업이 취소될 수 있다.  
 ![img_45.png](images/img_45.png)
 
 ### 예외 전파 제한하기
-1. 코루틴의 구조화를 깨서 예외 전파를 제한하기
+1. 코루틴의 구조화를 깨서 예외 전파를 제한하기  
 ![img_46.png](images/img_46.png)
 - 단순히 Job 객체를 새로 만들어 구조화를 깨고 싶은 코루틴에 연결화면 구조화가 깨진다.
 
@@ -570,10 +571,10 @@ fun main() = runBlocking<Unit> {
   - ```val supervisorJob = SupervisorJob(parent = this.coroutineContext[Job])```
 - SupervisorJob 은 자동 완료 처리 되지 않기 때문에, complete() 함수를 호출해 명시적으로 완료시켜줘야 한다.
 
-3. supervisorScope을 사용한 예외 전파 제한
+3. supervisorScope을 사용한 예외 전파 제한  
 ![img_55.png](images/img_55.png)
 
-### CoroutineExceptionHandler 사용하 예외 처리하기
+### CoroutineExceptionHandler 사용하여 예외 처리하기
 #### CoroutineExceptionHandler 란?
 - CoroutineExceptionHandler는 CoroutineContext의 구성 요소 중 하나이다.
 - CoroutineExceptionHandler는 처리되지 않은 예외만 처리한다.
@@ -798,7 +799,7 @@ fun main() = runBlocking<Unit> {
 - 코루틴이 일시 중단된 후 재개되면 CoroutineDispatcher 객체는 재개된 코루틴을 다시 스레드에 보낸다.
 - 이때 CoroutineDispatcher 객체는 코루틴을 사용할 수 있는 스레드 중 하나에 보내기 때문에, 코루틴이 재개된 후의 실행 스레드는
 일시 중단되기 전의 스레드와 다를 수 있다.
-- 하지만 스레드를 양보하지 않으면 실행 스레드가 바뀌지 않는다.
+- 하지만 스레드를 양보하지 않으면 실행 스레드가 바뀌지 않는다.  
 ![img_80.png](images/img_80.png)
 ![img_81.png](images/img_81.png)
 
@@ -855,10 +856,10 @@ fun main() = runBlocking<Unit> {
 ![img_83.png](images/img_83.png)
 - 업데이트 되지 않은 캐시 메모리로 인해 데이터 불일치 발생
 - 이를 위해 volatile(@Volatile) 어노테이션을 통해 가시성 확보 (CPU 캐시 메모리를 사용하지 않고, 메인 메모리 사용)
-- 하지만 위의 문제는 여러 스레드가 동시에 메인 메모리에 접근하여 경쟁 상태 (Race Condition) 문제가 발생하여 여전히 데이터 불일치가 발생함
+- 하지만 위의 문제는 여러 스레드가 동시에 메인 메모리에 접근하여 `경쟁 상태 (Race Condition)` 문제가 발생하여 여전히 데이터 불일치가 발생함
 
 #### 경쟁 상태 문제 해결 방법 - 1. Mutex 사용
-- 공유 변수의 변경 가능 지점을 임계 영역(Critical Area)으로 만들어 동시 접근을 제한할 수 있다.
+- 공유 변수의 변경 가능 지점을 `임계 영역(Critical Section)`으로 만들어 동시 접근을 제한할 수 있다.
 - 코루틴이 Mutex 객체의 lock 일시 중단 함수를 호출하면 락이 획득되며, 이후 해당 Mutex 객체에 대해 unlock이 호출될 때까지
   다른 코루틴이 해당 임계 영역에 진입할 수 없다.
 - ReentrantLock의 lock 함수는 만약 특정 스레드에서 락을 획득했다면, 다른 스레드에서 lock 함수를 호출할 경우
@@ -892,7 +893,9 @@ launch {
 
 #### DEFAULT vs ATOMIC vs UNDISPATCHED
 ![img_86.png](images/img_86.png)
+
 ![img_87.png](images/img_87.png)
+
 ![img_88.png](images/img_88.png)
 
 ### 무제한 디스패처 (잘 사용하지 않음)
@@ -958,28 +961,30 @@ Continuation 을 직접 다루려면 suspendCancellableCoroutine 을 활용
 - 테스트 더블의 종류로는 스텁(Stub), 페이크(Fake), 목(Mock) 등이 있다.
 #### 스텁(Stub)
 - 미리 정의된 데이터를 반환하는 모방 객체
-- 반환 값이 없는 함수는 구현하지 않고, 반환 값이 있는 동작만 미리 정의된 데이터를 반환하도록 구현한다.
+- 반환 값이 없는 함수는 구현하지 않고, 반환 값이 있는 동작만 미리 정의된 데이터를 반환하도록 구현한다.  
 ![img_95.png](images/img_95.png)
 - 스텁을 만들 때 미리 정의된 데이터를 내부 프로퍼티로 고정하면 유연하지 못해진다.
-- 미리 정의된 데이터를 주입 받는 형태로 만들어야 한다.
+- 미리 정의된 데이터를 주입 받는 형태로 만들어야 한다.  
 ![img_96.png](images/img_96.png)
 
 #### 페이크(Fake)
-- 실제 객체와 비슷하게 동작하도록 구현된 모방 객체
+- 실제 객체와 비슷하게 동작하도록 구현된 모방 객체  
 ![img_97.png](images/img_97.png)
 
 ### 코루틴 단위 테스트
-- 코루틴에서 runBlocking 함수를 사용해 실행에 오랜 시간이 걸리는 일시 중단 함수(delay)를 테스트하면 문제가 생기낟.
+- 코루틴에서 runBlocking 함수를 사용해 실행에 오랜 시간이 걸리는 일시 중단 함수(delay)를 테스트하면 문제가 생긴다.
 - delay 만큼 시간이 지연된다는 점 -> TestCoroutineScheduler 을 사용해 해결할 수 있다.
 
 ### TestCoroutineScheduler + StandardTestDispatcher 를 통해 가상 시간에서 테스트 진행하기
 - 코루틴 테스트 라이브러리는 TestCoroutineScheduler 객체를 통해 가상 시간에서 테스트를 진행할 수 있도록 하는 기능을 제공한다.
-- TestCoroutineScheduler 객체를 사용하면 시간을 자유 자재로 다룰 수 있다
+- TestCoroutineScheduler 객체를 사용하면 시간을 자유 자재로 다룰 수 있다  
 ![img_98.png](images/img_98.png)
 
 - TestCoroutineScheduler의 advanceUntilIdle 함수가 호출되면 가상 시간 스캐쥴러를 사용하는 모든 코루틴이 완료될 때까지
   시간이 흐른다. (하위 코루틴이 모두 실행되게 만드는 함수)
-- TestScope, rutTest 를 활용하면 더 간결한 코드를 작성할 수 있다.
+- TestScope, rutTest 를 활용하면 더 간결한 코드를 작성할 수 있다.  
 ![img_99.png](images/img_99.png)
+
 ![img_100.png](images/img_100.png)
+
 ![img_101.png](images/img_101.png)
